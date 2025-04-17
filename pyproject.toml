@@ -1,0 +1,3 @@
+[tool.codespell]
+# Skip checking charm libs
+ignore-words-list = "fpr"

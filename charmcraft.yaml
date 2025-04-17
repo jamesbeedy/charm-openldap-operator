@@ -1,0 +1,63 @@
+# Copyright 2025 Vantage Compute Corporation
+# See LICENSE file for licensing details.
+name: openldap
+summary: |
+  Charmed openldap.
+
+description: |
+  This charmed operator deploys openldap.
+
+links:
+  contact: https://matrix.to/#/#hpc:ubuntu.com
+
+  issues:
+  - https://github.com/charmed-hpc/charm-jupyterhub-slurm-operator/issues
+
+  source:
+  - https://github.com/charmed-hpc/charm-jupyterhub-slurm-operator
+
+assumes:
+  - juju
+
+type: charm
+base: ubuntu@24.04
+platforms:
+  amd64:
+
+subordinate: false
+
+parts:
+  charm: {}
+
+charm-libs:
+  - lib: operator_libs_linux.apt
+    version: "0.17"
+
+config:
+  options:
+    admin-password:
+      type: string
+      default: "admin"
+      description: |
+        LDAP administrator password.
+    domain:
+      type: string
+      default: "example.com"
+      description: |
+        LDAP Domain.
+    organization-name:
+      type: string
+      default: "Example Organization"
+      description: |
+        LDAP organization name.
+
+actions:
+  get-admin-password:
+    description: |
+      Display the administrator password.
+
+      Example usage:
+
+      ```bash
+      juju run openldap/leader get-admin-password
+      ```
