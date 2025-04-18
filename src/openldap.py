@@ -56,7 +56,8 @@ def _add_organizational_units() -> None:
                     "-D",
                     "cn=admin,dc=example,dc=com",
                     "-w",
-                    "admin" "-f",
+                    "admin",
+                    "-f",
                     ldif,
                 ]
             )
