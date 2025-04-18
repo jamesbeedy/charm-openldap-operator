@@ -131,8 +131,8 @@ def _add_schemas() -> None:
         _ldap("add", schema_ldif.read_text())
 
 
-def _modify_permissions() -> None:
-    """Update permissions of the sssd-binder user to read only."""
+def _assign_sssd_binder_user_read_only_permissions() -> None:
+    """Assign read only permissions to the sssd-binder user."""
     update_permissions_ldif = Path("./templates/update-permissions.ldif")
     _ldap("modify", update_permissions_ldif.read_text())
 
@@ -193,7 +193,7 @@ class OpenLDAPOps:
     def install(self, admin_pw: str, domain: str, organization_name: str) -> None:
         """Install packages."""
 
-        slapd_configs = [
+        slapd_non_interactive_configs = [
             ("slapd", "slapd/internal/adminpw", "password", admin_pw),
             ("slapd", "slapd/internal/generated_adminpw", "password", admin_pw),
             ("slapd", "slapd/password1", "password", admin_pw),
@@ -207,7 +207,7 @@ class OpenLDAPOps:
             ("slapd", "slapd/allow_ldap_v2", "boolean", "false"),
         ]
 
-        for pkg, question, val_type, value in slapd_configs:
+        for pkg, question, val_type, value in slapd_non_interactive_configs:
             _set_debconf_value(pkg, question, val_type, value)
 
         try:
@@ -224,10 +224,8 @@ class OpenLDAPOps:
         # Put the slapd config in place.
         copy2("./templates/slapd.default", "/etc/default/slapd")
 
-        # Create certs for ldap server.
+        # Create certs for ldap server and configure tls.
         _create_certs(domain, organization_name)
-
-        # Configure tls.
         _configure_ldap_tls()
         _restart_slapd()
 
@@ -237,14 +235,12 @@ class OpenLDAPOps:
         # Add organizational units.
         _add_organizational_units()
 
-        # Add sssd-binder user.
+        # Add sssd-binder user and assign permissions.
         _add_sssd_binder_user()
-
-        # Add slurm-users group and a user.
-        _add_slurm_users_group_and_user()
+        _assign_sssd_binder_user_read_only_permissions()
 
         # Add automount home entries.
         _add_automount_home_map_entries()
 
-        # Update permissions.
-        _modify_permissions()
+        # Add slurm-users group and a user.
+        _add_slurm_users_group_and_user()
