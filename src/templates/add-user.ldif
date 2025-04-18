@@ -1,0 +1,24 @@
+# Entry 1: uid=jamesbeedy,ou=People,dc=example,dc=com
+dn: uid=jamesbeedy,ou=People,dc=example,dc=com
+cn: James Beedy
+gidnumber: 5599
+homedirectory: /home/jamesbeedy
+loginshell: /bin/bash
+mail: jamesbeedy@example.org
+objectclass: top
+objectclass: inetOrgPerson
+objectclass: posixAccount
+objectclass: ldapPublicKey
+sn: Beedy
+sshpublickey: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDYQYaCPgpXJ/wJRYINKoV9IN
+ EDAshdYncmkl5HDUXsqgFEMwygZJQ07hXnXz/N54MFf5WzYgoj0VnAMyiSUKlc07xMYAxITIHWZ
+ JT0I3Qtc8mbhIKQWCki+Be5CcCdLwhUZLZMiyrLrWu58lkrnQj5Crz+tpORy44JTwnck/cCS3yO
+ hiYJOB7xQl3+/mzoqA2hvAIrot4aVSTsJIlYWvuWK4MlQ7MMCh+oDbWxgCvEbVJuEZv3v6u03Xj
+ N/svLdUJX4FFlodDLTf9mMHhNnzxWCEZQm+61bZW4zCsrYj0jX0CHsbXUkbLj9UJ44m/3uXrHHC
+ LKnYekx2MvUuBWI8ZueIefLBoD+sZIBG9Iwf5JpmM6A01BL+ARwIhjeOW9ucXgk2UztOzZrdeDH
+ J0BXQD8UA77CBCKWYuGIZRK/eL2tmiJ4WlLly+Nq59PvMyCvKml8YNreC0v7RaSROOgj9Ez2UIF
+ RVb/rt4VVevgY2967n85Nz3p93abeG5AJ2TZUyM= jamesbeedy@juju-b8c06f-13
+uid: jamesbeedy
+uidnumber: 5556
+userpassword: {SSHA}lsPPyZBJpSJzppncr1iTYVsabdyP2Wa5
+

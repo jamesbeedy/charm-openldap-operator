@@ -65,12 +65,60 @@ def _add_organizational_units() -> None:
             logger.error(e)
             raise e
 
+def _add_slurm_users_group_and_user() -> None:
+    """Add slurm users group and add a user."""
+
+    ldifs = [
+        "./src/templates/add-slurm-users-group.ldif",
+        "./src/templates/add-user.ldif",
+    ]
+    for ldif in ldifs:
+        try:
+            subprocess.check_call(
+                [
+                    "ldapadd",
+                    "-x",
+                    "-D",
+                    "cn=admin,dc=example,dc=com",
+                    "-w",
+                    "admin",
+                    "-f",
+                    ldif,
+                ]
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error(e)
+            raise e
+
+def _add_automount_home_map_entries() -> None:
+    """Add automap home entries."""
+
+    ldifs = [
+        "./src/templates/add-automount-home-map-entries.ldif",
+    ]
+    for ldif in ldifs:
+        try:
+            subprocess.check_call(
+                [
+                    "ldapadd",
+                    "-x",
+                    "-D",
+                    "cn=admin,dc=example,dc=com",
+                    "-w",
+                    "admin",
+                    "-f",
+                    ldif,
+                ]
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error(e)
+            raise e
 
 def _add_schemas() -> None:
     """Add schemas to openldap."""
 
     schemas = [
-        "./src/templates/autofs.ldif",
+        "./src/templates/autofs-schema.ldif",
         "./src/templates/openssh-lpk.ldif",
     ]
     for schema_ldif in schemas:
@@ -176,16 +224,22 @@ class OpenLDAPOps:
         copy2("./src/templates/slapd.default", "/etc/default/slapd")
         # Create certs for ldap server.
         self._create_certs(domain, organization_name)
+
         # Configure tls.
         self._configure_ldap_tls()
         _restart_slapd()
+
         # Add extra schemas.
         _add_schemas()
-        # Add organizational units
+        # Add organizational units.
         _add_organizational_units()
-        # Add sssd-binder user
+        # Add sssd-binder user.
         _add_sssd_binder_user()
-        # Update Permissions
+        # Add slurm-users group and a user.
+        _add_slurm_users_group_and_user()
+        # Add automount home entries.
+        _add_automount_home_map_entries()
+        # Update permissions.
         _modify_permissions()
 
     def _create_certs(self, domain: str, organization_name: str) -> None:

@@ -1,0 +1,34 @@
+# ─── 1) Create the auto.master container ───────────────────────────────────
+dn: ou=auto.master,dc=example,dc=com
+objectClass: top
+objectClass: organizationalUnit
+ou: auto.master
+
+# ─── 2) Master map “auto.master” ──────────────────────────────────────────
+dn: automountMapName=auto.master,ou=auto.master,dc=example,dc=com
+objectClass: top
+objectClass: automountMap
+automountMapName: auto.master
+description: AutoFS master map
+
+# ─── 3) Entry in the master map for /home ➞ “auto.home” ───────────────────
+dn: automountKey=/home,automountMapName=auto.master,ou=auto.master,dc=example,dc=com
+objectClass: top
+objectClass: automount
+automountKey: /home
+automountInformation: auto.home
+
+# ─── 4) The “auto.home” sub‑map itself ────────────────────────────────────
+dn: automountMapName=auto.home,ou=auto.master,dc=example,dc=com
+objectClass: top
+objectClass: automountMap
+automountMapName: auto.home
+description: Home‑directory sub‑map
+
+# ─── 5) Wildcard entry for all users under auto.home ─────────────────────
+dn: automountKey=*,automountMapName=auto.home,ou=auto.master,dc=example,dc=com
+objectClass: top
+objectClass: automount
+automountKey: *
+automountInformation: 10.240.222.24:/home/&
+
