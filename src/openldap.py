@@ -54,7 +54,9 @@ def _create_certs(self, domain: str, organization_name: str) -> None:
         raise OpenLDAPOpsError(e)
 
     try:
-        subprocess.run(["chown", "openldap:openldap", f"{_CERT_FILE}", f"{_KEY_FILE}"], check=True)
+        subprocess.run(
+            ["chown", "openldap:openldap", f"{_CERT_FILE}", f"{_KEY_FILE}"], check=True
+        )
     except subprocess.CalledProcessError as e:
         logger.error(e)
         raise OpenLDAPOpsError(e)
