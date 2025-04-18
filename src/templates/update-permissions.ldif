@@ -1,0 +1,7 @@
+dn: olcDatabase={0}config,cn=config
+changetype: modify
+add: olcAccess
+olcAccess: {0}to *
+  by dn.base="cn=admin,dc=example,dc=com" manage
+  by dn.base="cn=sssd-binder,ou=ServiceAccounts,dc=example,dc=com" read
+  by * none

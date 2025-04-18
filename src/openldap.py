@@ -16,17 +16,84 @@ import charms.operator_libs_linux.v0.apt as apt
 logger = logging.getLogger()
 
 
-def _add_autofs_schema() -> None:
+def _add_sssd_binder_user() -> None:
+    """Add sssd-binder user."""
+
+    ldifs = [
+        "./src/templates/add-sssd-binder.ldif",
+    ]
+    for ldif in ldifs:
+        try:
+            subprocess.check_call(
+                [
+                    "ldapadd",
+                    "-x",
+                    "-D",
+                    "cn=admin,dc=example,dc=com",
+                    "-w",
+                    "admin",
+                    "-f",
+                    ldif,
+                ]
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error(e)
+            raise e
+
+
+def _add_organizational_units() -> None:
+    """Add organizational units to openldap."""
+
+    ldifs = [
+        "./src/templates/add-organizational-units.ldif",
+    ]
+    for ldif in ldifs:
+        try:
+            subprocess.check_call(
+                [
+                    "ldapadd",
+                    "-x",
+                    "-D",
+                    "cn=admin,dc=example,dc=com",
+                    "-w",
+                    "admin" "-f",
+                    ldif,
+                ]
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error(e)
+            raise e
+
+
+def _add_schemas() -> None:
+    """Add schemas to openldap."""
+
+    schemas = [
+        "./src/templates/autofs.ldif",
+        "./src/templates/openssh-lpk.ldif",
+    ]
+    for schema_ldif in schemas:
+        try:
+            subprocess.check_call(
+                ["ldapadd", "-Y", "EXTERNAL", "-H", "ldapi:///", "-f", schema_ldif]
+            )
+        except subprocess.CalledProcessError as e:
+            logger.error(e)
+            raise e
+
+
+def _modify_permissions() -> None:
+    """Update permissions of the sssd-binder user."""
     try:
         subprocess.check_call(
             [
-                "ldapadd",
+                "ldapmodify",
                 "-Y",
                 "EXTERNAL",
                 "-H",
                 "ldapi:///",
                 "-f",
-                "./src/templates/autofs.ldif",
+                "./src/templates/update-permissions.ldif",
             ]
         )
     except subprocess.CalledProcessError as e:
@@ -104,11 +171,21 @@ class OpenLDAPOps:
             logger.error(msg)
             raise OpenLDAPOpsError(msg)
 
+        # Put the slapd config in place.
         copy2("./src/templates/slapd.default", "/etc/default/slapd")
+        # Create certs for ldap server.
         self._create_certs(domain, organization_name)
+        # Configure tls.
         self._configure_ldap_tls()
         _restart_slapd()
-        _add_autofs_schema()
+        # Add extra schemas.
+        _add_schemas()
+        # Add organizational units
+        _add_organizational_units()
+        # Add sssd-binder user
+        _add_sssd_binder_user()
+        # Update Permissions
+        _modify_permissions()
 
     def _create_certs(self, domain: str, organization_name: str) -> None:
         """Create certs for ldap."""
