@@ -9,145 +9,148 @@ import subprocess
 from pathlib import Path
 from shutil import copy2
 from textwrap import dedent
+from typing import Literal
+
 
 from exceptions import OpenLDAPOpsError
 import charms.operator_libs_linux.v0.apt as apt
 
+
 logger = logging.getLogger()
+
+
+_CERT_DIR = Path("/etc/ssl/ldap")
+_CERT_FILE = _CERT_DIR / "ldap.crt"
+_KEY_FILE = _CERT_DIR / "ldap.key"
+_CA_FILE = Path("/etc/ssl/certs/ca-certificates.crt")
+
+
+def _create_certs(self, domain: str, organization_name: str) -> None:
+    """Create certs for ldap."""
+
+    _CERT_DIR.mkdir(parents=True, exist_ok=True)
+
+    try:
+        subprocess.run(
+            [
+                "openssl",
+                "req",
+                "-new",
+                "-x509",
+                "-nodes",
+                "-days",
+                "365",
+                "-subj",
+                f"/C=US/ST=State/L=City/O={organization_name}/CN={domain}",
+                "-out",
+                f"{_CERT_FILE}",
+                "-keyout",
+                f"{_KEY_FILE}",
+            ],
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        logger.error(e)
+        raise OpenLDAPOpsError(e)
+
+    try:
+        subprocess.run(["chown", "openldap:openldap", f"{_CERT_FILE}", f"{_KEY_FILE}"], check=True)
+    except subprocess.CalledProcessError as e:
+        logger.error(e)
+        raise OpenLDAPOpsError(e)
+
+    try:
+        subprocess.run(["chmod", "600", f"{_KEY_FILE}"], check=True)
+    except subprocess.CalledProcessError as e:
+        logger.error(e)
+        raise OpenLDAPOpsError(e)
+
+
+def _configure_ldap_tls(self) -> None:
+    """Configure ldap with the certs."""
+
+    ldif = dedent(
+        f"""\
+        dn: cn=config
+        changetype: modify
+        replace: olcTLSCertificateFile
+        olcTLSCertificateFile: {_CERT_FILE}
+        -
+        replace: olcTLSCertificateKeyFile
+        olcTLSCertificateKeyFile: {_KEY_FILE}
+        -
+        replace: olcTLSCACertificateFile
+        olcTLSCACertificateFile: {_CA_FILE}
+        """
+    )
+    _ldap("modify", ldif)
 
 
 def _add_sssd_binder_user() -> None:
     """Add sssd-binder user."""
 
-    ldifs = [
-        "./src/templates/add-sssd-binder.ldif",
-    ]
-    for ldif in ldifs:
-        try:
-            subprocess.check_call(
-                [
-                    "ldapadd",
-                    "-x",
-                    "-D",
-                    "cn=admin,dc=example,dc=com",
-                    "-w",
-                    "admin",
-                    "-f",
-                    ldif,
-                ]
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error(e)
-            raise e
+    sssd_binder_user_ldif = Path("./templates/add-sssd-binder.ldif")
+    _ldap("add", sssd_binder_user_ldif.read_text())
 
 
 def _add_organizational_units() -> None:
     """Add organizational units to openldap."""
 
-    ldifs = [
-        "./src/templates/add-organizational-units.ldif",
-    ]
-    for ldif in ldifs:
-        try:
-            subprocess.check_call(
-                [
-                    "ldapadd",
-                    "-x",
-                    "-D",
-                    "cn=admin,dc=example,dc=com",
-                    "-w",
-                    "admin",
-                    "-f",
-                    ldif,
-                ]
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error(e)
-            raise e
+    base_organizational_units_ldif = Path("./templates/add-organizational-units.ldif")
+    _ldap("add", base_organizational_units_ldif.read_text())
+
 
 def _add_slurm_users_group_and_user() -> None:
     """Add slurm users group and add a user."""
 
     ldifs = [
-        "./src/templates/add-slurm-users-group.ldif",
-        "./src/templates/add-user.ldif",
+        Path("./templates/add-slurm-users-group.ldif"),
+        Path("./templates/add-user.ldif"),
     ]
     for ldif in ldifs:
-        try:
-            subprocess.check_call(
-                [
-                    "ldapadd",
-                    "-x",
-                    "-D",
-                    "cn=admin,dc=example,dc=com",
-                    "-w",
-                    "admin",
-                    "-f",
-                    ldif,
-                ]
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error(e)
-            raise e
+        _ldap("add", ldif.read_text())
+
 
 def _add_automount_home_map_entries() -> None:
     """Add automap home entries."""
 
-    ldifs = [
-        "./src/templates/add-automount-home-map-entries.ldif",
-    ]
-    for ldif in ldifs:
-        try:
-            subprocess.check_call(
-                [
-                    "ldapadd",
-                    "-x",
-                    "-D",
-                    "cn=admin,dc=example,dc=com",
-                    "-w",
-                    "admin",
-                    "-f",
-                    ldif,
-                ]
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error(e)
-            raise e
+    automount_home_map_ldif = Path("./templates/add-automount-home-map-entries.ldif")
+    _ldap("add", automount_home_map_ldif.read_text())
+
 
 def _add_schemas() -> None:
     """Add schemas to openldap."""
 
     schemas = [
-        "./src/templates/autofs-schema.ldif",
-        "./src/templates/openssh-lpk.ldif",
+        Path("./templates/autofs-schema.ldif"),
+        Path("./templates/openssh-lpk-schema.ldif"),
     ]
     for schema_ldif in schemas:
-        try:
-            subprocess.check_call(
-                ["ldapadd", "-Y", "EXTERNAL", "-H", "ldapi:///", "-f", schema_ldif]
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error(e)
-            raise e
+        _ldap("add", schema_ldif.read_text())
 
 
 def _modify_permissions() -> None:
-    """Update permissions of the sssd-binder user."""
+    """Update permissions of the sssd-binder user to read only."""
+    update_permissions_ldif = Path("./templates/update-permissions.ldif")
+    _ldap("modify", update_permissions_ldif.read_text())
+
+
+def _ldap(cmd: Literal["add", "modify"], ldif: str) -> None:
+    """Add or modify an ldap mapping."""
+
     try:
-        subprocess.check_call(
-            [
-                "ldapmodify",
-                "-Y",
-                "EXTERNAL",
-                "-H",
-                "ldapi:///",
-                "-f",
-                "./src/templates/update-permissions.ldif",
-            ]
+        process = subprocess.Popen(
+            [f"ldap{cmd}", "-Y", "EXTERNAL", "-H", "ldapi:///"],
+            stdin=subprocess.PIPE,
+            text=True,
         )
+        stdout, stderr = process.communicate(ldif)
     except subprocess.CalledProcessError as e:
         logger.error(e)
-        raise e
+        raise OpenLDAPOpsError(e)
+
+        if process.returncode != 0:
+            raise OpenLDAPOpsError(f"ldap{cmd} failed:\n{stderr}")
 
 
 def _restart_slapd() -> None:
@@ -184,10 +187,6 @@ class OpenLDAPOps:
 
     def __init__(self):
         self._packages = ["ldap-utils", "slapd", "debconf-utils"]
-        self._cert_dir = Path("/etc/ssl/ldap")
-        self._cert_file = self._cert_dir / "ldap.crt"
-        self._key_file = self._cert_dir / "ldap.key"
-        self._ca_file = Path("/etc/ssl/certs/ca-certificates.crt")
 
     def install(self, admin_pw: str, domain: str, organization_name: str) -> None:
         """Install packages."""
@@ -221,103 +220,29 @@ class OpenLDAPOps:
             raise OpenLDAPOpsError(msg)
 
         # Put the slapd config in place.
-        copy2("./src/templates/slapd.default", "/etc/default/slapd")
+        copy2("./templates/slapd.default", "/etc/default/slapd")
+
         # Create certs for ldap server.
-        self._create_certs(domain, organization_name)
+        _create_certs(domain, organization_name)
 
         # Configure tls.
-        self._configure_ldap_tls()
+        _configure_ldap_tls()
         _restart_slapd()
 
         # Add extra schemas.
         _add_schemas()
+
         # Add organizational units.
         _add_organizational_units()
+
         # Add sssd-binder user.
         _add_sssd_binder_user()
+
         # Add slurm-users group and a user.
         _add_slurm_users_group_and_user()
+
         # Add automount home entries.
         _add_automount_home_map_entries()
+
         # Update permissions.
         _modify_permissions()
-
-    def _create_certs(self, domain: str, organization_name: str) -> None:
-        """Create certs for ldap."""
-
-        self._cert_dir.mkdir(parents=True, exist_ok=True)
-
-        try:
-            subprocess.run(
-                [
-                    "openssl",
-                    "req",
-                    "-new",
-                    "-x509",
-                    "-nodes",
-                    "-days",
-                    "365",
-                    "-subj",
-                    f"/C=US/ST=State/L=City/O={organization_name}/CN={domain}",
-                    "-out",
-                    f"{self._cert_file}",
-                    "-keyout",
-                    f"{self._key_file}",
-                ],
-                check=True,
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error(e)
-            raise OpenLDAPOpsError(e)
-
-        try:
-            subprocess.run(
-                [
-                    "chown",
-                    "openldap:openldap",
-                    f"{self._cert_file}",
-                    f"{self._key_file}",
-                ],
-                check=True,
-            )
-        except subprocess.CalledProcessError as e:
-            logger.error(e)
-            raise OpenLDAPOpsError(e)
-
-        try:
-            subprocess.run(["chmod", "600", f"{self._key_file}"], check=True)
-        except subprocess.CalledProcessError as e:
-            logger.error(e)
-            raise OpenLDAPOpsError(e)
-
-    def _configure_ldap_tls(self) -> None:
-        """Configure ldap with the certs."""
-
-        ldif = dedent(
-            f"""\
-            dn: cn=config
-            changetype: modify
-            replace: olcTLSCertificateFile
-            olcTLSCertificateFile: {self._cert_file}
-            -
-            replace: olcTLSCertificateKeyFile
-            olcTLSCertificateKeyFile: {self._key_file}
-            -
-            replace: olcTLSCACertificateFile
-            olcTLSCACertificateFile: {self._ca_file}
-            """
-        )
-
-        try:
-            process = subprocess.Popen(
-                ["ldapmodify", "-Y", "EXTERNAL", "-H", "ldapi:///"],
-                stdin=subprocess.PIPE,
-                text=True,
-            )
-            stdout, stderr = process.communicate(ldif)
-        except subprocess.CalledProcessError as e:
-            logger.error(e)
-            raise OpenLDAPOpsError(e)
-
-        if process.returncode != 0:
-            raise OpenLDAPOpsError(f"ldapmodify failed:\n{stderr}")
