@@ -35,11 +35,11 @@ class OpenLDAPOperatorCharm(CharmBase):
         super().__init__(*args, **kwargs)
 
         self._stored.set_default(
-            admin_password=str(),
-            sssd_binder_password=str(),
             domain=str(),
             organization_name=str(),
         )
+
+        #self.sssd = SSSD(self, "sssd")
 
         event_handler_bindings = {
             self.on.install: self._on_install,
@@ -55,10 +55,16 @@ class OpenLDAPOperatorCharm(CharmBase):
     def _on_install(self, event: InstallEvent) -> None:
         """Perform installation operations."""
 
-        # Put these values in stored state for persistence and to eliminate the
-        # possibility of values changing post deployment.
-        self._admin_password = secrets.token_urlsafe(32)
-        self._sssd_binder_password = secrets.token_urlsafe(32)
+        admin_password = secrets.token_urlsafe(32)
+        content = {'password': admin_password}
+        secret = self.app.add_secret(content, label="admin-password")
+        logger.debug(f"admin-password secret id: {secret.id}")
+
+        sssd_binder_password = secrets.token_urlsafe(32)
+        content = {'password': sssd_binder_password}
+        secret = self.app.add_secret(content, label="sssd-binder-password")
+        logger.debug(f"sssd-binder-password secret id: {secret.id}")
+
         self._domain = self.config.get("domain")
         self._organization_name = self.config.get("organization-name")
 
@@ -68,8 +74,8 @@ class OpenLDAPOperatorCharm(CharmBase):
                 base_dn=self._base_dn,
                 domain=self._domain,
                 organization_name=self._organization_name,
-                admin_password=self._admin_password,
-                sssd_binder_password=self._sssd_binder_password,
+                admin_password=admin_password,
+                sssd_binder_password=sssd_binder_password,
             )
             self.unit.status = ActiveStatus("OpenLDAP installed.")
             self.unit.status = ActiveStatus("")
@@ -111,22 +117,14 @@ class OpenLDAPOperatorCharm(CharmBase):
     @property
     def _admin_password(self) -> str:
         """Return the ldap admin_password from stored state."""
-        return self._stored.admin_password
-
-    @_admin_password.setter
-    def _admin_password(self, admin_password: str) -> None:
-        """Set the admin_password in stored state."""
-        self._stored.admin_password = admin_password
+        secret = self.app.get_secret(label="admin-password")
+        return secret.get_content()["password"]
 
     @property
     def _sssd_binder_password(self) -> str:
         """Return the sssd-binder password from stored state."""
-        return self._stored.sssd_binder_password
-
-    @_sssd_binder_password.setter
-    def _sssd_binder_password(self, sssd_binder_password: str) -> None:
-        """Set the sssd-_inder_password in stored state."""
-        self._stored.sssd_binder_password = sssd_binder_password
+        secret = self.app.get_secret(label="sssd-binder-password")
+        return secret.get_content()["password"]
 
     @property
     def _base_dn(self) -> str:
