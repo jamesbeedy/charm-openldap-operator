@@ -1,7 +1,7 @@
-dn: cn=sssd-binder,ou=ServiceAccounts,dc=example,dc=com
+dn: cn=sssd-binder,ou=ServiceAccounts,$base_dn
 objectClass: simpleSecurityObject
 # Use organizationalRole instead of account to avoid needing uid attribute
 objectClass: organizationalRole
 cn: sssd-binder
 description: Read-only service account for SSSD binding
-userPassword: {SSHA}chqh8NGYqPeK47xitVA5wGi9STUsHdfx
+userPassword: $sssd_binder_password_hash

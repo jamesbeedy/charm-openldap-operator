@@ -33,6 +33,10 @@ charm-libs:
   - lib: operator_libs_linux.apt
     version: "0.17"
 
+requires:
+  homedir-server-ipaddr:
+    interface: homedir-server-ipaddr
+
 config:
   options:
     admin-password:
@@ -60,4 +64,13 @@ actions:
 
       ```bash
       juju run openldap/leader get-admin-password
+      ```
+  get-sssd-binder-password:
+    description: |
+      Display the sssd-binder password.
+
+      Example usage:
+
+      ```bash
+      juju run openldap/leader get-sssd-binder-password
       ```

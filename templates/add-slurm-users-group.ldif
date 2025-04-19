@@ -1,5 +1,5 @@
-# Entry 1: cn=itgroup,ou=Groups,dc=example,dc=com
-dn: cn=slurm-users,ou=Groups,dc=example,dc=com
+# Entry 1: cn=itgroup,ou=Groups,$base_dn
+dn: cn=slurm-users,ou=Groups,$base_dn
 cn: slurm-users
 gidnumber: 5599
 objectclass: top

@@ -1,0 +1,11 @@
+# Entry # 1 Update Schema for TLS
+dn: cn=config
+changetype: modify
+replace: olcTLSCertificateFile
+olcTLSCertificateFile: $cert_file
+-
+replace: olcTLSCertificateKeyFile
+olcTLSCertificateKeyFile: $key_file
+-
+replace: olcTLSCACertificateFile
+olcTLSCACertificateFile: $ca_file

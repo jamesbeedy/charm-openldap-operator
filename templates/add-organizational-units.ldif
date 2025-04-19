@@ -1,14 +1,14 @@
 # Entry #1 ServiceAccounts
-dn: ou=ServiceAccounts,dc=example,dc=com
+dn: ou=ServiceAccounts,$base_dn
 objectClass: organizationalUnit
 ou: ServiceAccounts
 
 # Entry #2 Groups
-dn: ou=Groups,dc=example,dc=com
+dn: ou=Groups,$base_dn
 objectclass: organizationalUnit
 ou: Groups
 
 # Entry #3 People
-dn: ou=People,dc=example,dc=com
+dn: ou=People,$base_dn
 objectclass: organizationalUnit
 ou: People

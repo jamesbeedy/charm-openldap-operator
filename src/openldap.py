@@ -8,7 +8,7 @@ import subprocess
 
 from pathlib import Path
 from shutil import copy2
-from textwrap import dedent
+from string import Template
 from typing import Literal
 
 
@@ -68,56 +68,71 @@ def _create_certs(self, domain: str, organization_name: str) -> None:
         raise OpenLDAPOpsError(e)
 
 
-def _configure_ldap_tls(self) -> None:
-    """Configure ldap with the certs."""
+def _update_ldap_tls_config(self) -> None:
+    """Add cert, key, and ca to ldap config."""
 
-    ldif = dedent(
-        f"""\
-        dn: cn=config
-        changetype: modify
-        replace: olcTLSCertificateFile
-        olcTLSCertificateFile: {_CERT_FILE}
-        -
-        replace: olcTLSCertificateKeyFile
-        olcTLSCertificateKeyFile: {_KEY_FILE}
-        -
-        replace: olcTLSCACertificateFile
-        olcTLSCACertificateFile: {_CA_FILE}
-        """
-    )
-    _ldap("modify", ldif)
+    ldif_template_path = Path("./templates/update-tls-config.ldif")
+    ldif_template = Template(ldif_template_path.read_text())
+    ldif_template.substitute(cert_file=_CERT_FILE, key_file=_KEY_FILE, ca_file=_CA_FILE)
+    _ldap("modify", ldif_template)
 
 
-def _add_sssd_binder_user() -> None:
+def _add_sssd_binder_user(base_dn: str, sssd_binder_password: str) -> None:
     """Add sssd-binder user."""
+    try:
+        p = subprocess.Popen(
+            ["slappasswd", "-h", "{SSHA}", "-s", sssd_binder_password],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        stdout, stderr = p.communicate()
+    except subprocess.CalledProcessError as e:
+        logger.error(e)
+        raise OpenLDAPOpsError(e)
 
-    sssd_binder_user_ldif = Path("./templates/add-sssd-binder.ldif")
-    _ldap("add", sssd_binder_user_ldif.read_text())
+    sssd_binder_password_hash = stdout.strip()
+
+    ldif_template_path = Path("./templates/add-sssd-binder.ldif")
+    ldif_template = Template(ldif_template_path.read_text())
+    ldif_template.substitute(
+        base_dn=base_dn,
+        sssd_binder_password_hash=sssd_binder_password_hash,
+    )
+    _ldap("add", ldif_template)
 
 
-def _add_organizational_units() -> None:
+def _add_organizational_units(base_dn: str) -> None:
     """Add organizational units to openldap."""
 
-    base_organizational_units_ldif = Path("./templates/add-organizational-units.ldif")
-    _ldap("add", base_organizational_units_ldif.read_text())
+    ldif_template_path = Path("./templates/add-organizational-units.ldif")
+    ldif_template = Template(ldif_template_path.read_text())
+    ldif_template.substitute(base_dn=base_dn)
+    _ldap("add", ldif_template)
 
 
-def _add_slurm_users_group_and_user() -> None:
+def _add_slurm_users_group_and_user(base_dn: str) -> None:
     """Add slurm users group and add a user."""
 
-    ldifs = [
+    ldif_templates = [
         Path("./templates/add-slurm-users-group.ldif"),
         Path("./templates/add-user.ldif"),
     ]
-    for ldif in ldifs:
-        _ldap("add", ldif.read_text())
+    for ldif_template_path in ldif_templates:
+        ldif_template = Template(ldif_template_path.read_text())
+        ldif_template.substitute(base_dn=base_dn)
+        _ldap("add", ldif_template)
 
 
-def _add_automount_home_map_entries() -> None:
+def _add_automount_home_map_entries(base_dn: str, homedir_server_apaddr: str) -> None:
     """Add automap home entries."""
 
-    automount_home_map_ldif = Path("./templates/add-automount-home-map-entries.ldif")
-    _ldap("add", automount_home_map_ldif.read_text())
+    ldif_template_path = Path("./templates/add-automount-home-map-entries.ldif")
+    ldif_template = Template(ldif_template_path.read_text())
+    ldif_template.substitute(
+        base_dn=base_dn, homedir_server_apaddr=homedir_server_apaddr
+    )
+    _ldap("add", ldif_template)
 
 
 def _add_schemas() -> None:
@@ -131,10 +146,12 @@ def _add_schemas() -> None:
         _ldap("add", schema_ldif.read_text())
 
 
-def _assign_sssd_binder_user_read_only_permissions() -> None:
+def _assign_sssd_binder_user_read_only_permissions(base_dn: str) -> None:
     """Assign read only permissions to the sssd-binder user."""
-    update_permissions_ldif = Path("./templates/update-permissions.ldif")
-    _ldap("modify", update_permissions_ldif.read_text())
+    ldif_template_path = Path("./templates/update-permissions.ldif")
+    ldif_template = Template(ldif_template_path.read_text())
+    ldif_template.substitute(base_dn=base_dn)
+    _ldap("modify", ldif_template)
 
 
 def _ldap(cmd: Literal["add", "modify"], ldif: str) -> None:
@@ -190,14 +207,21 @@ class OpenLDAPOps:
     def __init__(self):
         self._packages = ["ldap-utils", "slapd", "debconf-utils"]
 
-    def install(self, admin_pw: str, domain: str, organization_name: str) -> None:
+    def install(
+        self,
+        base_dn: str,
+        domain: str,
+        organization_name: str,
+        admin_password: str,
+        sssd_binder_password: str,
+    ) -> None:
         """Install packages."""
 
         slapd_non_interactive_configs = [
-            ("slapd", "slapd/internal/adminpw", "password", admin_pw),
-            ("slapd", "slapd/internal/generated_adminpw", "password", admin_pw),
-            ("slapd", "slapd/password1", "password", admin_pw),
-            ("slapd", "slapd/password2", "password", admin_pw),
+            ("slapd", "slapd/internal/adminpw", "password", admin_password),
+            ("slapd", "slapd/internal/generated_adminpw", "password", admin_password),
+            ("slapd", "slapd/password1", "password", admin_password),
+            ("slapd", "slapd/password2", "password", admin_password),
             ("slapd", "slapd/domain", "string", domain),
             ("slapd", "shared/organization", "string", organization_name),
             ("slapd", "slapd/backend", "select", "MDB"),
@@ -226,21 +250,24 @@ class OpenLDAPOps:
 
         # Create certs for ldap server and configure tls.
         _create_certs(domain, organization_name)
-        _configure_ldap_tls()
+        _update_ldap_tls_config()
         _restart_slapd()
 
         # Add extra schemas.
         _add_schemas()
 
-        # Add organizational units.
-        _add_organizational_units()
-
         # Add sssd-binder user and assign permissions.
-        _add_sssd_binder_user()
-        _assign_sssd_binder_user_read_only_permissions()
-
-        # Add automount home entries.
-        _add_automount_home_map_entries()
+        _add_sssd_binder_user(base_dn, sssd_binder_password)
+        _assign_sssd_binder_user_read_only_permissions(base_dn)
 
         # Add slurm-users group and a user.
-        _add_slurm_users_group_and_user()
+        _add_slurm_users_group_and_user(base_dn)
+
+        # Add organizational units.
+        _add_organizational_units(base_dn)
+
+    def configure_automount_maps(
+        self, base_dn: str, homedir_server_ipaddr: str
+    ) -> None:
+        """Add automount home entries."""
+        _add_automount_home_map_entries(base_dn, homedir_server_ipaddr)

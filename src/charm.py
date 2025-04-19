@@ -5,20 +5,21 @@
 """OpenLDAPOperatorCharm."""
 
 import logging
+import secrets
 
 from ops import (
     CharmBase,
     ActionEvent,
     InstallEvent,
-    StartEvent,
-    ConfigChangedEvent,
+    StoredState,
+    RelationJoinedEvent,
     ActiveStatus,
     BlockedStatus,
     WaitingStatus,
     main,
 )
 
-from exceptions import IngressAddressUnavailableError, OpenLDAPOpsError
+from exceptions import OpenLDAPOpsError
 from openldap import OpenLDAPOps
 
 logger = logging.getLogger()
@@ -27,15 +28,26 @@ logger = logging.getLogger()
 class OpenLDAPOperatorCharm(CharmBase):
     """OpenLDAP Operator lifecycle events."""
 
+    _stored = StoredState()
+
     def __init__(self, *args, **kwargs):
         """Init _stored attributes and interfaces, observe events."""
         super().__init__(*args, **kwargs)
 
+        self._stored.set_default(
+            admin_password=str(),
+            sssd_binder_password=str(),
+            domain=str(),
+            organization_name=str(),
+        )
+
         event_handler_bindings = {
             self.on.install: self._on_install,
-            self.on.start: self._on_start,
-            self.on.config_changed: self._on_config_changed,
+            self.on[
+                "homedir-server-ipaddr"
+            ].relation_joined: self._on_homedir_server_joined,
             self.on.get_admin_password_action: self._on_get_admin_password,
+            self.on.get_sssd_binder_password_action: self._on_get_sssd_binder_password,
         }
         for event, handler in event_handler_bindings.items():
             self.framework.observe(event, handler)
@@ -43,13 +55,22 @@ class OpenLDAPOperatorCharm(CharmBase):
     def _on_install(self, event: InstallEvent) -> None:
         """Perform installation operations."""
 
-        admin_pw = self.config.get("admin-password")
-        domain = self.config.get("domain")
-        organization_name = self.config.get("organization-name")
+        # Put these values in stored state for persistence and to eliminate the
+        # possibility of values changing post deployment.
+        self._admin_password = secrets.token_urlsafe(32)
+        self._sssd_binder_password = secrets.token_urlsafe(32)
+        self._domain = self.config.get("domain")
+        self._organization_name = self.config.get("organization-name")
 
         try:
             self.unit.status = WaitingStatus("Installing OpenLDAP server...")
-            OpenLDAPOps().install(admin_pw, domain, organization_name)
+            OpenLDAPOps().install(
+                base_dn=self._base_dn,
+                domain=self._domain,
+                organization_name=self._organization_name,
+                admin_password=self._admin_password,
+                sssd_binder_password=self._sssd_binder_password,
+            )
             self.unit.status = ActiveStatus("OpenLDAP installed.")
             self.unit.status = ActiveStatus("")
         except OpenLDAPOpsError as e:
@@ -60,26 +81,75 @@ class OpenLDAPOperatorCharm(CharmBase):
             event.defer()
             return
 
-    def _on_start(self, event: StartEvent) -> None:
-        """Start hook."""
-        pass
+    def _on_homedir_server_joined(self, event: RelationJoinedEvent) -> None:
+        """Get the homedir server ip address and configure the maps for automount."""
+        homedir_server_ipaddr = event.relation.data[event.unit]["ingress-address"]
 
-    def _on_config_changed(self, event: ConfigChangedEvent) -> None:
-        """Perform config-changed operations."""
-        pass
-
-    @property
-    def _ingress_address(self) -> str:
-        """Return the ingress_address from the peer relation if it exists."""
-        if (peer_binding := self.model.get_binding("jupyterhub-peer")) is not None:
-            ingress_address = f"{peer_binding.network.ingress_address}"
-            logger.debug(f"ingress_address: {ingress_address}")
-            return ingress_address
-        raise IngressAddressUnavailableError("Ingress address unavailable")
+        try:
+            self.unit.status = WaitingStatus("Adding automount maps to ldap server...")
+            OpenLDAPOps().configure_automount_maps(self._base_dn, homedir_server_ipaddr)
+            self.unit.status = ActiveStatus("Automount maps successfully added.")
+            self.unit.status = ActiveStatus("")
+        except OpenLDAPOpsError as e:
+            self.unit.status = BlockedStatus(
+                "Trouble adding automount maps to ldap, please debug."
+            )
+            logger.debug(e)
+            event.defer()
+            return
 
     def _on_get_admin_password(self, event: ActionEvent) -> None:
         """Return the ldap admin password."""
-        event.set_results({"password": "rrrrattsss"})
+        event.set_results({"password": self._admin_password})
+
+    def _on_get_sssd_binder_password(self, event: ActionEvent) -> None:
+        """Return the ldap admin password."""
+        event.set_results({"password": self._sssd_binder_password})
+
+    @property
+    def _admin_password(self) -> str:
+        """Return the ldap admin_password from stored state."""
+        return self._stored.admin_password
+
+    @_admin_password.setter
+    def _admin_password(self, admin_password: str) -> None:
+        """Set the admin_password in stored state."""
+        self._stored.admin_password = admin_password
+
+    @property
+    def _sssd_binder_password(self) -> str:
+        """Return the sssd-binder password from stored state."""
+        return self._stored.sssd_binder_password
+
+    @_sssd_binder_password.setter
+    def _sssd_binder_password(self, sssd_binder_password: str) -> None:
+        """Set the sssd-_inder_password in stored state."""
+        self._stored.sssd_binder_password = sssd_binder_password
+
+    @property
+    def _base_dn(self) -> str:
+        """Return the base_dn from the domain."""
+        return f"dc={self._domain.split('.')[0]},dc={self._domain.split('.')[1]}"
+
+    @property
+    def _domain(self) -> str:
+        """Return the ldap domain from stored state."""
+        return self._stored.domain
+
+    @_domain.setter
+    def _domain(self, domain: str) -> None:
+        """Set the domain in stored state."""
+        self._stored.domain = domain
+
+    @property
+    def _organization_name(self) -> str:
+        """Return the ldap organization name from stored state."""
+        return self._stored.organization_name
+
+    @_organization_name.setter
+    def _organization_name(self, organization_name: str) -> None:
+        """Set the organization name in stored state."""
+        self._stored.organization_name = organization_name
 
 
 if __name__ == "__main__":  # pragma: nocover
