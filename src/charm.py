@@ -39,7 +39,7 @@ class OpenLDAPOperatorCharm(CharmBase):
             organization_name=str(),
         )
 
-        #self.sssd = SSSD(self, "sssd")
+        # self.sssd = SSSD(self, "sssd")
 
         event_handler_bindings = {
             self.on.install: self._on_install,
@@ -56,12 +56,12 @@ class OpenLDAPOperatorCharm(CharmBase):
         """Perform installation operations."""
 
         admin_password = secrets.token_urlsafe(32)
-        content = {'password': admin_password}
+        content = {"password": admin_password}
         secret = self.app.add_secret(content, label="admin-password")
         logger.debug(f"admin-password secret id: {secret.id}")
 
         sssd_binder_password = secrets.token_urlsafe(32)
-        content = {'password': sssd_binder_password}
+        content = {"password": sssd_binder_password}
         secret = self.app.add_secret(content, label="sssd-binder-password")
         logger.debug(f"sssd-binder-password secret id: {secret.id}")
 
