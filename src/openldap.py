@@ -73,8 +73,8 @@ def _update_ldap_tls_config() -> None:
 
     ldif_template_path = Path("./templates/update-tls-config.ldif")
     ldif_template = Template(ldif_template_path.read_text())
-    ldif_template.substitute(cert_file=_CERT_FILE, key_file=_KEY_FILE, ca_file=_CA_FILE)
-    _ldap("modify", ldif_template)
+    ldif = ldif_template.substitute(cert_file=_CERT_FILE, key_file=_KEY_FILE, ca_file=_CA_FILE)
+    _ldap("modify", ldif)
 
 
 def _add_sssd_binder_user(base_dn: str, sssd_binder_password: str) -> None:
@@ -95,11 +95,11 @@ def _add_sssd_binder_user(base_dn: str, sssd_binder_password: str) -> None:
 
     ldif_template_path = Path("./templates/add-sssd-binder.ldif")
     ldif_template = Template(ldif_template_path.read_text())
-    ldif_template.substitute(
+    ldif = ldif_template.substitute(
         base_dn=base_dn,
         sssd_binder_password_hash=sssd_binder_password_hash,
     )
-    _ldap("add", ldif_template)
+    _ldap("add", ldif)
 
 
 def _add_organizational_units(base_dn: str) -> None:
@@ -107,8 +107,8 @@ def _add_organizational_units(base_dn: str) -> None:
 
     ldif_template_path = Path("./templates/add-organizational-units.ldif")
     ldif_template = Template(ldif_template_path.read_text())
-    ldif_template.substitute(base_dn=base_dn)
-    _ldap("add", ldif_template)
+    ldif = ldif_template.substitute(base_dn=base_dn)
+    _ldap("add", ldif)
 
 
 def _add_slurm_users_group_and_user(base_dn: str) -> None:
@@ -120,8 +120,8 @@ def _add_slurm_users_group_and_user(base_dn: str) -> None:
     ]
     for ldif_template_path in ldif_templates:
         ldif_template = Template(ldif_template_path.read_text())
-        ldif_template.substitute(base_dn=base_dn)
-        _ldap("add", ldif_template)
+        ldif = ldif_template.substitute(base_dn=base_dn)
+        _ldap("add", ldif)
 
 
 def _add_automount_home_map_entries(base_dn: str, homedir_server_apaddr: str) -> None:
@@ -129,10 +129,10 @@ def _add_automount_home_map_entries(base_dn: str, homedir_server_apaddr: str) ->
 
     ldif_template_path = Path("./templates/add-automount-home-map-entries.ldif")
     ldif_template = Template(ldif_template_path.read_text())
-    ldif_template.substitute(
+    ldif = ldif_template.substitute(
         base_dn=base_dn, homedir_server_apaddr=homedir_server_apaddr
     )
-    _ldap("add", ldif_template)
+    _ldap("add", ldif)
 
 
 def _add_schemas() -> None:
@@ -150,8 +150,8 @@ def _assign_sssd_binder_user_read_only_permissions(base_dn: str) -> None:
     """Assign read only permissions to the sssd-binder user."""
     ldif_template_path = Path("./templates/update-permissions.ldif")
     ldif_template = Template(ldif_template_path.read_text())
-    ldif_template.substitute(base_dn=base_dn)
-    _ldap("modify", ldif_template)
+    ldif = ldif_template.substitute(base_dn=base_dn)
+    _ldap("modify", ldif)
 
 
 def _ldap(cmd: Literal["add", "modify"], ldif: str) -> None:
