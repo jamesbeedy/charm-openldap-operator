@@ -25,7 +25,7 @@ _KEY_FILE = _CERT_DIR / "ldap.key"
 _CA_FILE = Path("/etc/ssl/certs/ca-certificates.crt")
 
 
-def _create_certs(self, domain: str, organization_name: str) -> None:
+def _create_certs(domain: str, organization_name: str) -> None:
     """Create certs for ldap."""
 
     _CERT_DIR.mkdir(parents=True, exist_ok=True)
@@ -68,7 +68,7 @@ def _create_certs(self, domain: str, organization_name: str) -> None:
         raise OpenLDAPOpsError(e)
 
 
-def _update_ldap_tls_config(self) -> None:
+def _update_ldap_tls_config() -> None:
     """Add cert, key, and ca to ldap config."""
 
     ldif_template_path = Path("./templates/update-tls-config.ldif")
