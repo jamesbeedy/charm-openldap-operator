@@ -33,6 +33,11 @@ charm-libs:
   - lib: operator_libs_linux.apt
     version: "0.17"
 
+provides:
+  sssd:
+    interface: ldap-sssd
+
+
 requires:
   homedir-server-ipaddr:
     interface: homedir-server-ipaddr

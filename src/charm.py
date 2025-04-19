@@ -13,6 +13,7 @@ from ops import (
     InstallEvent,
     StoredState,
     RelationJoinedEvent,
+    RelationCreatedEvent,
     ActiveStatus,
     BlockedStatus,
     WaitingStatus,
@@ -46,6 +47,8 @@ class OpenLDAPOperatorCharm(CharmBase):
             self.on[
                 "homedir-server-ipaddr"
             ].relation_joined: self._on_homedir_server_joined,
+            self.on["sssd"].relation_created: self._on_sssd_created,
+            # Actions
             self.on.get_admin_password_action: self._on_get_admin_password,
             self.on.get_sssd_binder_password_action: self._on_get_sssd_binder_password,
         }
@@ -86,6 +89,15 @@ class OpenLDAPOperatorCharm(CharmBase):
             logger.debug(e)
             event.defer()
             return
+
+    def _on_sssd_relation_created(self, event: RelationCreatedEvent) -> None:
+        """Send data to SSSD."""
+        secret = self.app.secret.get_secret(label="sssd-binder-password")
+        secret.grant(event.app)
+
+        event.relation.data[self.app]["sssd-binder-password-secret-id"] = secret.id
+        event.relation.data[self.app]["domain"] = self._domain
+        event.relation.data[self.app]["base-dn"] = self._base_dn
 
     def _on_homedir_server_joined(self, event: RelationJoinedEvent) -> None:
         """Get the homedir server ip address and configure the maps for automount."""
