@@ -87,7 +87,7 @@ class OpenLDAPOperatorCharm(CharmBase):
 
         try:
             self.unit.status = WaitingStatus("Adding automount maps to ldap server...")
-            OpenLDAPOps().configure_automount_maps(self._base_dn, homedir_server_ipaddr)
+            OpenLDAPOps().configure_automount_maps(self._base_dn, self._admin_password, homedir_server_ipaddr)
             self.unit.status = ActiveStatus("Automount maps successfully added.")
             self.unit.status = ActiveStatus("")
         except OpenLDAPOpsError as e:

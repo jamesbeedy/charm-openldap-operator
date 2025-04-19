@@ -19,5 +19,6 @@ sshpublickey: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDYQYaCPgpXJ/wJRYINKoV9IN
  RVb/rt4VVevgY2967n85Nz3p93abeG5AJ2TZUyM= jamesbeedy@juju-b8c06f-13
 uid: user1
 uidnumber: 5556
+sn: user1
 userpassword: {SSHA}lsPPyZBJpSJzppncr1iTYVsabdyP2Wa5
 

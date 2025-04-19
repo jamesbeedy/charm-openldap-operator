@@ -68,16 +68,20 @@ def _create_certs(domain: str, organization_name: str) -> None:
         raise OpenLDAPOpsError(e)
 
 
-def _update_ldap_tls_config() -> None:
+def _update_ldap_tls_config(base_dn: str, admin_password: str) -> None:
     """Add cert, key, and ca to ldap config."""
 
     ldif_template_path = Path("./templates/update-tls-config.ldif")
     ldif_template = Template(ldif_template_path.read_text())
-    ldif = ldif_template.substitute(cert_file=_CERT_FILE, key_file=_KEY_FILE, ca_file=_CA_FILE)
-    _ldap("modify", ldif)
+    ldif = ldif_template.substitute(
+        cert_file=_CERT_FILE, key_file=_KEY_FILE, ca_file=_CA_FILE
+    )
+    _ldap("modify", base_dn, admin_password, ldif)
 
 
-def _add_sssd_binder_user(base_dn: str, sssd_binder_password: str) -> None:
+def _add_sssd_binder_user(
+    base_dn: str, admin_password: str, sssd_binder_password: str
+) -> None:
     """Add sssd-binder user."""
     try:
         p = subprocess.Popen(
@@ -99,19 +103,21 @@ def _add_sssd_binder_user(base_dn: str, sssd_binder_password: str) -> None:
         base_dn=base_dn,
         sssd_binder_password_hash=sssd_binder_password_hash,
     )
-    _ldap("add", ldif)
+    logger.debug(ldif)
+    _ldap("add", base_dn, admin_password, ldif)
 
 
-def _add_organizational_units(base_dn: str) -> None:
+def _add_organizational_units(base_dn: str, admin_password: str) -> None:
     """Add organizational units to openldap."""
 
     ldif_template_path = Path("./templates/add-organizational-units.ldif")
     ldif_template = Template(ldif_template_path.read_text())
     ldif = ldif_template.substitute(base_dn=base_dn)
-    _ldap("add", ldif)
+    logger.debug(ldif)
+    _ldap("add", base_dn, admin_password, ldif)
 
 
-def _add_slurm_users_group_and_user(base_dn: str) -> None:
+def _add_slurm_users_group_and_user(base_dn: str, admin_password: str) -> None:
     """Add slurm users group and add a user."""
 
     ldif_templates = [
@@ -121,18 +127,22 @@ def _add_slurm_users_group_and_user(base_dn: str) -> None:
     for ldif_template_path in ldif_templates:
         ldif_template = Template(ldif_template_path.read_text())
         ldif = ldif_template.substitute(base_dn=base_dn)
-        _ldap("add", ldif)
+        logger.debug(ldif)
+        _ldap("add", base_dn, admin_password, ldif)
 
 
-def _add_automount_home_map_entries(base_dn: str, homedir_server_apaddr: str) -> None:
+def _add_automount_home_map_entries(
+    base_dn: str, admin_password: str, homedir_server_ipaddr: str
+) -> None:
     """Add automap home entries."""
 
     ldif_template_path = Path("./templates/add-automount-home-map-entries.ldif")
     ldif_template = Template(ldif_template_path.read_text())
     ldif = ldif_template.substitute(
-        base_dn=base_dn, homedir_server_apaddr=homedir_server_apaddr
+        base_dn=base_dn, homedir_server_ipaddr=homedir_server_ipaddr
     )
-    _ldap("add", ldif)
+    logger.debug(ldif)
+    _ldap("add", base_dn, admin_password, ldif)
 
 
 def _add_schemas() -> None:
@@ -143,23 +153,50 @@ def _add_schemas() -> None:
         Path("./templates/openssh-lpk-schema.ldif"),
     ]
     for schema_ldif in schemas:
-        _ldap("add", schema_ldif.read_text())
+        try:
+            process = subprocess.Popen(
+                ["ldapadd", "-Y", "EXTERNAL", "-v", "-H", "ldapi:///"],
+                stdin=subprocess.PIPE,
+                text=True,
+            )
+            ldif = schema_ldif.read_text()
+            logger.debug(ldif)
+            stdout, stderr = process.communicate(ldif)
+        except subprocess.CalledProcessError as e:
+            logger.error(e)
+            raise OpenLDAPOpsError(e)
+
+        if process.returncode != 0:
+            raise OpenLDAPOpsError(f"Adding schema failed:\n{stderr}")
 
 
-def _assign_sssd_binder_user_read_only_permissions(base_dn: str) -> None:
+def _assign_sssd_binder_user_read_only_permissions(
+    base_dn: str, admin_password: str
+) -> None:
     """Assign read only permissions to the sssd-binder user."""
     ldif_template_path = Path("./templates/update-permissions.ldif")
     ldif_template = Template(ldif_template_path.read_text())
     ldif = ldif_template.substitute(base_dn=base_dn)
-    _ldap("modify", ldif)
+    logger.debug(ldif)
+    _ldap("modify", base_dn, admin_password, ldif)
 
 
-def _ldap(cmd: Literal["add", "modify"], ldif: str) -> None:
+def _ldap(
+    cmd: Literal["add", "modify"], base_dn: str, admin_password: str, ldif: str
+) -> None:
     """Add or modify an ldap mapping."""
 
     try:
         process = subprocess.Popen(
-            [f"ldap{cmd}", "-Y", "EXTERNAL", "-H", "ldapi:///"],
+            [
+                f"ldap{cmd}",
+                "-x",
+                "-D",
+                f"cn=admin,{base_dn}",
+                "-v",
+                "-w",
+                admin_password,
+            ],
             stdin=subprocess.PIPE,
             text=True,
         )
@@ -250,24 +287,24 @@ class OpenLDAPOps:
 
         # Create certs for ldap server and configure tls.
         _create_certs(domain, organization_name)
-        _update_ldap_tls_config()
+        _update_ldap_tls_config(base_dn, admin_password)
         _restart_slapd()
 
         # Add extra schemas.
         _add_schemas()
 
+        # Add organizational units.
+        _add_organizational_units(base_dn, admin_password)
+
         # Add sssd-binder user and assign permissions.
-        _add_sssd_binder_user(base_dn, sssd_binder_password)
-        _assign_sssd_binder_user_read_only_permissions(base_dn)
+        _add_sssd_binder_user(base_dn, admin_password, sssd_binder_password)
+        _assign_sssd_binder_user_read_only_permissions(base_dn, admin_password)
 
         # Add slurm-users group and a user.
-        _add_slurm_users_group_and_user(base_dn)
-
-        # Add organizational units.
-        _add_organizational_units(base_dn)
+        _add_slurm_users_group_and_user(base_dn, admin_password)
 
     def configure_automount_maps(
-        self, base_dn: str, homedir_server_ipaddr: str
+        self, base_dn: str, admin_password: str, homedir_server_ipaddr: str
     ) -> None:
         """Add automount home entries."""
-        _add_automount_home_map_entries(base_dn, homedir_server_ipaddr)
+        _add_automount_home_map_entries(base_dn, admin_password, homedir_server_ipaddr)
